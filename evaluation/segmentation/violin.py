@@ -1,4 +1,6 @@
+import argparse
 import os
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -7,12 +9,6 @@ plt.rcParams["font.family"] = "sans-serif"
 plt.rcParams["font.sans-serif"] = ["Arial"]
 plt.rcParams["mathtext.fontset"] = "stix"
 plt.rcParams["pdf.fonttype"] = 42
-
-result_dir = r"D:\lab\cell\LatestResultV2.0"
-datasets_config = [
-    {"name": "Sansha-5", "prefix": "(A)"},
-    {"name": "WO115-2", "prefix": "(B)"}
-]
 
 def plot_dataset_axes(fig, grid_pos, errors_list, aps_list, names, cols, overall_errors, overall_aps, d_name, prefix):
     subgrid = grid_pos.subgridspec(1, 2, wspace=0.3)
@@ -79,40 +75,73 @@ def plot_dataset_axes(fig, grid_pos, errors_list, aps_list, names, cols, overall
         t.set_color(cols[i])
         t.set_weight("bold")
 
+def draw_violin_plot(result_dir, output_dir=None, datasets=None, algs=None, alg_names=None):
+    output_dir = output_dir or result_dir
+    os.makedirs(output_dir, exist_ok=True)
 
-fig = plt.figure(figsize=(15, 7))
-master_grid = plt.GridSpec(1, 2, wspace=0.2, bottom=0.2, top=0.85)
-
-for idx, config in enumerate(datasets_config):
-    dataset_name = config["name"]
-    prefix = config["prefix"]
-    algs = ["cyto3", "cyto3_ours", "cellposesam", "cellposesam_ours"]
-    alg_names = ["cyto3", "cyto3_Ours", "Cellpose-SAM", "Cellpose-SAM_Ours"]
+    datasets = datasets or ["Sansha-5", "WO115-2"]
+    algs = algs or ["cyto3", "cyto3_ours", "cellposesam", "cellposesam_ours"]
+    alg_names = alg_names or ["cyto3", "cyto3_Ours", "Cellpose-SAM", "Cellpose-SAM_Ours"]
     colors = ["#6F669B", "#5D99BB", "#5F8E84", "#BC7365"]
 
-    aps_data = []
-    errors_data = []
-    overall_errors = []
-    overall_aps = []
+    fig = plt.figure(figsize=(15, 7))
+    master_grid = plt.GridSpec(1, len(datasets), wspace=0.2, bottom=0.2, top=0.85)
 
-    for alg in algs:
-        file_path = os.path.join(result_dir, f"{alg}_{dataset_name}.npy")
-        if not os.path.exists(file_path):
-            print(f"File not found: {file_path}")
-            continue
-        dat = np.load(file_path, allow_pickle=True).item()
-        tp, fp, fn = dat["tp"][:, 0], dat["fp"][:, 0], dat["fn"][:, 0]
-        aps_data.append(dat["ap"][:, 0])
-        errors_data.append((fp + fn) / (tp + fn))
-        
-        total_tp, total_fp, total_fn = tp.sum(), fp.sum(), fn.sum()
-        overall_errors.append((total_fp + total_fn) / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0)
-        overall_aps.append(total_tp / (total_tp + total_fp + total_fn) if (total_tp + total_fp + total_fn) > 0 else 0)
+    for idx, dataset_name in enumerate(datasets):
+        prefix = f"({chr(ord('A') + idx)})"
+        aps_data = []
+        errors_data = []
+        overall_errors = []
+        overall_aps = []
+        used_alg_names = []
+        used_colors = []
 
-    if len(aps_data) > 0:
-        plot_dataset_axes(fig, master_grid[0, idx], errors_data, aps_data, alg_names, colors, overall_errors, overall_aps, dataset_name, prefix)
+        for alg_idx, alg in enumerate(algs):
+            file_path = os.path.join(result_dir, f"{alg}_{dataset_name}.npy")
+            if not os.path.exists(file_path):
+                print(f"File not found: {file_path}")
+                continue
+            dat = np.load(file_path, allow_pickle=True).item()
+            tp, fp, fn = dat["tp"][:, 0], dat["fp"][:, 0], dat["fn"][:, 0]
+            aps_data.append(dat["ap"][:, 0])
+            errors_data.append((fp + fn) / (tp + fn))
 
-save_path = os.path.join(result_dir, "result_segmentation.pdf")
-plt.savefig(save_path, format="pdf", bbox_inches="tight")
-plt.close(fig)
-print(f"Combined figure saved to {save_path}")
+            total_tp, total_fp, total_fn = tp.sum(), fp.sum(), fn.sum()
+            overall_errors.append((total_fp + total_fn) / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0)
+            overall_aps.append(total_tp / (total_tp + total_fp + total_fn) if (total_tp + total_fp + total_fn) > 0 else 0)
+            used_alg_names.append(alg_names[alg_idx] if alg_idx < len(alg_names) else alg)
+            used_colors.append(colors[alg_idx % len(colors)])
+
+        if len(aps_data) > 0:
+            plot_dataset_axes(
+                fig,
+                master_grid[0, idx],
+                errors_data,
+                aps_data,
+                used_alg_names,
+                used_colors,
+                overall_errors,
+                overall_aps,
+                dataset_name,
+                prefix
+            )
+
+    save_path = os.path.join(output_dir, "result_segmentation.pdf")
+    plt.savefig(save_path, format="pdf", bbox_inches="tight")
+    plt.close(fig)
+    print(f"Combined figure saved to {save_path}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Draw segmentation AP/error violin plots from NPY files.")
+    parser.add_argument("--result_dir", required=True, help="Directory containing *_Dataset.npy files.")
+    parser.add_argument("--output_dir", default=None, help="Directory for result_segmentation.pdf.")
+    parser.add_argument("--datasets", nargs="+", default=["Sansha-5", "WO115-2"],
+                        help="Dataset names matching the NPY filename suffix.")
+    parser.add_argument("--algs", nargs="+", default=["cyto3", "cyto3_ours", "cellposesam", "cellposesam_ours"],
+                        help="Algorithm names matching the NPY filename prefix.")
+    parser.add_argument("--alg_names", nargs="+", default=["cyto3", "cyto3_Ours", "Cellpose-SAM", "Cellpose-SAM_Ours"],
+                        help="Display names for algorithms.")
+    args = parser.parse_args()
+
+    draw_violin_plot(args.result_dir, args.output_dir, args.datasets, args.algs, args.alg_names)

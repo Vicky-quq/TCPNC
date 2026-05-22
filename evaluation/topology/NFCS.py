@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import traceback
@@ -375,18 +376,15 @@ def batch_evaluate(gt_dir, pred_dir):
 
 
 if __name__ == "__main__":
-    # gt_folder_path = r"D:\lab\cell\LatestDataset\sansha-5"
-    # pred_folder_path = r"D:\lab\cell\LatestResultV2.0\sansha-5\cellposesam_ours"
-    # pred_folder_path = r"D:\lab\cell\LatestResultV2.0\sansha-5\cyto3_ours" #
-
-    gt_folder_path = r"D:\lab\cell\LatestDataset\WO115-2"
-    # pred_folder_path = r"D:\lab\cell\LatestResultV2.0\WO115-2\cellposesam_ours"
-    pred_folder_path = r"D:\lab\cell\LatestResultV2.0\WO115-2\cyto3_ours"
+    parser = argparse.ArgumentParser(description="Evaluate cell neighborhood topology with NFCS.")
+    parser.add_argument("--gt_dir", required=True, help="Ground-truth JSON directory.")
+    parser.add_argument("--pred_dir", required=True, help="Prediction JSON directory.")
+    args = parser.parse_args()
 
     try:
-        if not os.path.exists(gt_folder_path) or not os.path.exists(pred_folder_path):
+        if not os.path.exists(args.gt_dir) or not os.path.exists(args.pred_dir):
             print("错误: 文件夹路径不存在！")
         else:
-            batch_evaluate(gt_folder_path, pred_folder_path)
+            batch_evaluate(args.gt_dir, args.pred_dir)
     except Exception as e:
         traceback.print_exc()

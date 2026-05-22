@@ -1,7 +1,7 @@
 import matplotlib
 from matplotlib.ticker import MaxNLocator
 
-matplotlib.use("TkAgg")
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
@@ -161,12 +161,13 @@ def plot_dataset_row(fig, grid_pos, gt_points, pred_points_dict, dataset_name, p
                 label.set_fontfamily("Arial")
             ax_count.tick_params(axis="y", labelsize=10)
 
-def run_all_evaluations(root="D:/lab/cell/LatestResult", gt_root="D:/lab/cell/LatestDataset", roi_threshold=0.5):
-    datasets = [
-        {"name": "sansha-5", "prefix": "(A)"},
-        {"name": "WO115-2 batch2", "prefix": "(B)"}
+def run_all_evaluations(pred_root, gt_root, roi_threshold=0.5, datasets=None, target_algs=None):
+    os.makedirs(pred_root, exist_ok=True)
+    datasets = datasets or [
+        {"name": "Sansha-5", "prefix": "(A)"},
+        {"name": "WO115-2", "prefix": "(B)"}
     ]
-    target_algs = ["cellposesam_ours", "cyto3_ours"]
+    target_algs = target_algs or ["cellposesam_ours", "cyto3_ours"]
 
     # fig = plt.figure(figsize=(14, 10))
     # master_grid = plt.GridSpec(2, 1, hspace=0.4, left=0.1, right=0.9, bottom=0.1, top=0.9)
@@ -175,7 +176,7 @@ def run_all_evaluations(root="D:/lab/cell/LatestResult", gt_root="D:/lab/cell/La
         dataset_name = dataset["name"]
         prefix = dataset["prefix"]
         gt_folder = os.path.join(gt_root, dataset_name)
-        pred_base_folder = os.path.join(root, dataset_name)
+        pred_base_folder = os.path.join(pred_root, dataset_name)
         
         if not os.path.exists(gt_folder): continue
 
@@ -239,7 +240,7 @@ def run_all_evaluations(root="D:/lab/cell/LatestResult", gt_root="D:/lab/cell/La
         cols = ["Method"] + [f"Vertice={k}" for k in sorted_keys] + ["total num"]
         df = df[cols]
         
-        csv_filename = os.path.join(root, f"vertex_analysis_{dataset_name}.csv")
+        csv_filename = os.path.join(pred_root, f"vertex_analysis_{dataset_name}.csv")
         # To make the header more like the image (Top-left cell empty), we can rename 'Method' to ''
         df.rename(columns={"Method": ""}, inplace=True)
         df.to_csv(csv_filename, index=False, encoding='utf-8-sig')
@@ -251,10 +252,15 @@ def run_all_evaluations(root="D:/lab/cell/LatestResult", gt_root="D:/lab/cell/La
     # print(f"Results saved to {save_path}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", default="D:/lab/cell/LatestResultV3.0")
-    parser.add_argument("--gt_root", default="D:/lab/cell/LatestDataset")
+    parser = argparse.ArgumentParser(description="Analyze polygon vertex-count distributions.")
+    parser.add_argument("--pred_root", "--root", dest="pred_root", required=True,
+                        help="Prediction result root containing dataset folders.")
+    parser.add_argument("--gt_root", required=True, help="Ground-truth root containing dataset folders.")
+    parser.add_argument("--datasets", nargs="+", default=["Sansha-5", "WO115-2"],
+                        help="Dataset folder names to evaluate.")
+    parser.add_argument("--algs", nargs="+", default=["cellposesam_ours", "cyto3_ours"],
+                        help="Prediction method subfolders to evaluate.")
     parser.add_argument("--roi_threshold", type=float, default=0.5)
     args = parser.parse_args()
-    run_all_evaluations(args.root, args.gt_root, args.roi_threshold)
-
+    dataset_configs = [{"name": name, "prefix": f"({chr(ord('A') + idx)})"} for idx, name in enumerate(args.datasets)]
+    run_all_evaluations(args.pred_root, args.gt_root, args.roi_threshold, dataset_configs, args.algs)
