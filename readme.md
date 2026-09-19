@@ -1,6 +1,6 @@
 # TCPNC
 
-TCPNC is a polygon topology reconstruction and evaluation toolkit for cell instance masks. The main pipeline is `TCPCN.py`; scripts under `evaluation/` are evaluation utilities for segmentation, boundary, and topology analysis.
+TCPNC is a polygon topology reconstruction and evaluation toolkit for cell instance masks. The main pipeline is `TCPCN.py` and exports polygon meshes as PLY and LabelMe JSON files; scripts under `evaluation/` are evaluation utilities for segmentation, boundary, and topology analysis.
 
 ## Directory Layout
 
@@ -80,22 +80,63 @@ data/
 
 Ground-truth JSON files should follow the LabelMe format and include `imageHeight`, `imageWidth`, and polygon-like shapes.
 
+### Image–Mask Pairing Requirements
+
+When `--img_dir` is provided, TCPCN processes every supported image file in that directory and searches for a mask file in `--mask_dir` whose filename contains the image basename. For example, `A2 0808.tif` can be paired with `A2 0808_masks.tif`.
+
+To ensure reliable pairing:
+
+- Store original images and instance masks in **separate directories**. Do not point both `--img_dir` and `--mask_dir` to the same directory; otherwise mask files may also be processed as images.
+- Use a consistent, unique naming convention, such as `sample.tif` and `sample_masks.tif`.
+- Ensure that each image basename matches **exactly one** mask filename. Avoid multiple candidates such as `sample_masks.tif` and `sample_masks_old.tif`, because the current pipeline uses the first matching mask file it finds.
+- Keep the image and its corresponding mask at the same pixel dimensions. Masks should be single-channel instance-label images: background `0`, with each cell assigned a distinct positive integer label.
+
+## Practical Scope and Limitations
+
+TCPCN is designed for the topological post-processing of static two-dimensional (2D) cell instance segmentation masks. It generally provides more stable reconstructions when individual cell contours within a tissue can be reasonably approximated by low-complexity polygons with relatively few sides and exhibit limited local concavity. For cells with highly curved contours, deep local concavities, or highly irregular shapes, automated reconstruction performance may be limited, and users may need to inspect and manually correct the results. For low-quality masks containing substantial noise, incomplete boundaries, or segmentation errors, improving the segmentation or using complementary tools is recommended. In addition, TCPCN does not perform cross-frame cell tracking or temporal-consistency analysis; dynamic datasets therefore require appropriate temporal analysis tools.
+
 ## Run TCPCN
 
-Convert instance masks to topology-aware polygon JSON files:
+Convert instance masks to polygon meshes. PLY and LabelMe JSON outputs are both enabled by default:
 
 ```bash
 python TCPCN.py \
   --mask_dir data/masks \
-  --json_dir results/json \
+  --output_dir results \
   --img_dir data/images \
   --vis_dir results/vis \
+  --save_ply 1 \
+  --save_json 1 \
   --fix_convexity 1 \
   --split_4way 1 \
   --k_size 51
 ```
 
-`--img_dir` and `--vis_dir` are optional. If visualization is not needed, omit both.
+`--img_dir` and `--vis_dir` are optional. Provide both to save the standard pipeline and junction visualizations; otherwise omit them.
+Generated files are placed in `results/ply/` and `results/json/`. Use `--save_ply 0` or `--save_json 0` to disable either format. The two options cannot both be `0`.
+When standard visualization is enabled, TCPCN saves `<filename>_pipeline.png` and `<filename>_junctions.png` in `--vis_dir`.
+
+PLY files use the standard ASCII PLY vertex-and-face structure:
+
+```text
+element vertex N
+property float x
+property float y
+property float z
+element face M
+property list uchar int vertex_indices
+```
+
+PLY coordinates use a Cartesian coordinate system with the origin at the lower left, positive Y upward, and `z = 0`. Faces use counterclockwise vertex order. Shared polygon vertices are stored once and referenced by index from each face. JSON files retain the original image coordinate system with the origin at the upper left and positive Y downward.
+
+### Optional Topology-Refinement Switches
+
+Both topology-refinement steps can be enabled or disabled independently:
+
+- `--fix_convexity 1|0`: apply convexity correction to reconstructed polygons (`1` by default).
+- `--split_4way 1|0`: split four-way junctions into three-way junctions during polygon reconstruction (`1` by default).
+
+Set either option to `0` to disable the corresponding step.
 
 ## Segmentation Evaluation
 

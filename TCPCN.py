@@ -400,6 +400,75 @@ def save_json(img_name, points_list, h, w, json_dir):
         json.dump(data, f, indent=2)
 
 
+def build_ply_mesh(points_list, image_height):
+    """Build a planar PLY mesh using Cartesian coordinates and shared vertex indices."""
+    vertices = []
+    vertex_map = {}
+    faces = []
+
+    for polygon_index, points in enumerate(points_list, start=1):
+        face = []
+        for point in points:
+            x = float(point[0])
+            y = float(image_height - 1 - float(point[1]))
+            key = (round(x, 4), round(y, 4))
+
+            if key not in vertex_map:
+                vertex_map[key] = len(vertices)
+                vertices.append((x, y, 0.0))
+
+            vertex_index = vertex_map[key]
+            if not face or face[-1] != vertex_index:
+                face.append(vertex_index)
+
+        if len(face) > 1 and face[0] == face[-1]:
+            face.pop()
+
+        if len(face) < 3 or len(set(face)) < 3:
+            raise ValueError(f"Polygon {polygon_index} has fewer than three distinct vertices")
+        if len(face) > 255:
+            raise ValueError(f"Polygon {polygon_index} has more than 255 vertices")
+
+        area_twice = 0.0
+        for i, vertex_index in enumerate(face):
+            next_vertex_index = face[(i + 1) % len(face)]
+            x1, y1, _ = vertices[vertex_index]
+            x2, y2, _ = vertices[next_vertex_index]
+            area_twice += x1 * y2 - x2 * y1
+
+        if abs(area_twice) <= 1e-8:
+            raise ValueError(f"Polygon {polygon_index} has zero area")
+        if area_twice < 0:
+            face.reverse()
+
+        faces.append(face)
+
+    return vertices, faces
+
+
+def save_ply(img_name, points_list, image_height, ply_dir):
+    """Save polygons as a standard ASCII PLY vertex-and-face mesh."""
+    vertices, faces = build_ply_mesh(points_list, image_height)
+    ply_path = os.path.join(ply_dir, os.path.splitext(img_name)[0] + ".ply")
+
+    with open(ply_path, 'w', encoding='ascii', newline='\n') as f:
+        f.write("ply\n")
+        f.write("format ascii 1.0\n")
+        f.write(f"element vertex {len(vertices)}\n")
+        f.write("property float x\n")
+        f.write("property float y\n")
+        f.write("property float z\n")
+        f.write(f"element face {len(faces)}\n")
+        f.write("property list uchar int vertex_indices\n")
+        f.write("end_header\n")
+
+        for x, y, z in vertices:
+            f.write(f"{x:.10g} {y:.10g} {z:.10g}\n")
+        for face in faces:
+            indices = " ".join(str(index) for index in face)
+            f.write(f"{len(face)} {indices}\n")
+
+
 def render_visualization(img_rgb, mask, skeleton, G, refined_centroids, final_polygons, img_name, vis_dir):
     """Render and save pipeline processing status as an image."""
     plt.figure(figsize=(20, 16))
@@ -496,10 +565,19 @@ def analyze_junctions_from_polygons(img_rgb, polygons, img_name, vis_dir):
     plt.close()
 
 
-def batch_process(img_folder, mask_folder, json_out_folder, vis_out_folder, fix_convexity=True, split_4way=True,
-                  k_size=51):
+def batch_process(img_folder, mask_folder, output_dir, vis_out_folder, save_ply_output=True,
+                  save_json_output=True, fix_convexity=True, split_4way=True, k_size=51):
     """Process multiple images/masks in a folder sequence."""
-    os.makedirs(json_out_folder, exist_ok=True)
+    if not save_ply_output and not save_json_output:
+        raise ValueError("At least one of PLY or JSON output must be enabled")
+
+    os.makedirs(output_dir, exist_ok=True)
+    ply_out_folder = os.path.join(output_dir, "ply") if save_ply_output else None
+    json_out_folder = os.path.join(output_dir, "json") if save_json_output else None
+    if ply_out_folder:
+        os.makedirs(ply_out_folder, exist_ok=True)
+    if json_out_folder:
+        os.makedirs(json_out_folder, exist_ok=True)
     if vis_out_folder:
         if not img_folder:
             print("Warning: '--vis_dir' is provided but '--img_dir' is missing. Visualization will be disabled.")
@@ -570,7 +648,6 @@ def batch_process(img_folder, mask_folder, json_out_folder, vis_out_folder, fix_
                 print(f"   [Convexity Fix] Applying convex hull fix to {len(polygons)} polygons...")
                 shapes_for_topo = [{"points": poly} for poly in polygons]
                 topo_manager = TopologyManager(shapes_for_topo)
-
                 fix_convexity_with_topology(topo_manager)
 
                 fixed_polygons = []
@@ -578,8 +655,12 @@ def batch_process(img_folder, mask_folder, json_out_folder, vis_out_folder, fix_
                     fixed_polygons.append(topo_manager.get_shape_points(s_idx).tolist())
                 polygons = fixed_polygons
 
-            print(f"   [Save] Saving JSON to {json_out_folder}...")
-            save_json(file_identifier, polygons, h, w, json_out_folder)
+            if ply_out_folder:
+                print(f"   [Save] Saving PLY to {ply_out_folder}...")
+                save_ply(file_identifier, polygons, h, ply_out_folder)
+            if json_out_folder:
+                print(f"   [Save] Saving JSON to {json_out_folder}...")
+                save_json(file_identifier, polygons, h, w, json_out_folder)
 
             if vis_out_folder and img_rgb is not None:
                 print(f"   [Render] Rendering pipeline visualization...")
@@ -601,9 +682,14 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--img_dir", type=str, default=None,
                         help="(Optional) Input directory of original images, required for visualization")
     parser.add_argument("-m", "--mask_dir", type=str, required=True, help="Input directory of instance masks")
-    parser.add_argument("-j", "--json_dir", type=str, required=True, help="Output directory for generated JSON files")
+    parser.add_argument("-o", "--output_dir", type=str, required=True,
+                        help="Output root directory; PLY and JSON files are saved in separate subdirectories")
     parser.add_argument("-v", "--vis_dir", type=str, default=None,
                         help="(Optional) Output directory for visualization images")
+    parser.add_argument("--save_ply", type=int, choices=[0, 1], default=1,
+                        help="Generate PLY files (1=Enable, 0=Disable, default: 1)")
+    parser.add_argument("--save_json", type=int, choices=[0, 1], default=1,
+                        help="Generate LabelMe JSON files (1=Enable, 0=Disable, default: 1)")
 
     parser.add_argument("--fix_convexity", type=int, choices=[0, 1], default=1,
                         help="Enable automatic convex hull fix (1=Enable, 0=Disable, default: 1)")
@@ -613,11 +699,15 @@ if __name__ == "__main__":
                         help="Kernel size for dilation in skeleton preprocessing (default: 51)")
 
     args = parser.parse_args()
+    if not args.save_ply and not args.save_json:
+        parser.error("--save_ply and --save_json cannot both be 0")
 
     print("\n--- Current Pipeline Configuration ---")
     print(f"Image Dir : {args.img_dir}")
     print(f"Mask Dir  : {args.mask_dir}")
-    print(f"JSON Dir  : {args.json_dir}")
+    print(f"Output Dir: {args.output_dir}")
+    print(f"Save PLY  : {bool(args.save_ply)}")
+    print(f"Save JSON : {bool(args.save_json)}")
     print(f"Vis Dir   : {args.vis_dir if args.vis_dir else 'Disabled'}")
     print(f"Fix Convex: {bool(args.fix_convexity)}")
     print(f"Split 4Way: {bool(args.split_4way)}")
@@ -627,8 +717,10 @@ if __name__ == "__main__":
     batch_process(
         args.img_dir,
         args.mask_dir,
-        args.json_dir,
+        args.output_dir,
         args.vis_dir,
+        save_ply_output=bool(args.save_ply),
+        save_json_output=bool(args.save_json),
         fix_convexity=bool(args.fix_convexity),
         split_4way=bool(args.split_4way),
         k_size=args.k_size
