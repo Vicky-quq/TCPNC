@@ -74,9 +74,9 @@ def draw_plot(dataset_name, model_data, scales_val, avg_diam, prefix, output_dir
 
     display_names = {
         "cyto3": "cyto3",
-        "cyto3_ours": "cyto3_Ours ",
+        "cyto3_ours": "cyto3+Ours",
         "cellposesam": "Cellpose-SAM",
-        "cellposesam_ours": "Cellpose-SAM_Ours"
+        "cellposesam_ours": "Cellpose-SAM+Ours"
     }
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5), dpi=300, facecolor='w')

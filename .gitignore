@@ -13,3 +13,9 @@ Thumbs.db
 .vscode/
 
 *.log
+
+# Benchmark datasets are hosted on Zenodo; generated results are distributed
+# through GitHub Releases rather than committed to the repository history.
+benchmark/Dataset/
+benchmark/Result/
+release_assets/
