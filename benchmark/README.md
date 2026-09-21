@@ -26,13 +26,11 @@ benchmark/
     │   ├── cellposesam/
     │   ├── cellposesam_ours/
     │   │   ├── json/
-    │   │   ├── ply/
-    │   │   └── vis/
+    │   │   └── ply/
     │   ├── cyto3/
     │   └── cyto3_ours/
     │       ├── json/
-    │       ├── ply/
-    │       └── vis/
+    │       └── ply/
     ├── WO115-2/
     │   └── ...
     ├── *.npy
@@ -41,19 +39,21 @@ benchmark/
     └── *.pdf
 ```
 
-The JSON files under `Dataset/` are LabelMe ground-truth annotations. The `cellposesam/` and `cyto3/` directories contain instance segmentation masks. Directories ending in `_ours` contain TCPCN post-processing outputs: LabelMe polygons, ASCII PLY meshes, and pipeline visualizations.
+The JSON files under `Dataset/` are LabelMe ground-truth annotations. The `cellposesam/` and `cyto3/` directories contain instance segmentation masks. Directories ending in `_ours` contain TCPCN post-processing outputs: LabelMe polygons and ASCII PLY meshes.
 
 ## Release Assets
 
-The generated results are split into multiple ZIP archives to simplify downloading:
+The generated results are split by dataset and segmentation method to simplify downloading:
 
-- `Sansha-5_results.zip` extracts to `Result/Sansha-5/`.
-- `WO115-2_results.zip` extracts to `Result/WO115-2/`.
+- `Sansha-5_cellposesam.zip` and `Sansha-5_cyto3.zip` contain the original instance masks for Sansha-5.
+- `Sansha-5_cellposesam_tcpcn_geometry.zip` and `Sansha-5_cyto3_tcpcn_geometry.zip` contain the corresponding TCPCN JSON and PLY outputs for Sansha-5.
+- `WO115-2_cellposesam.zip` and `WO115-2_cyto3.zip` contain the original instance masks for WO115-2.
+- `WO115-2_cellposesam_tcpcn_geometry.zip` and `WO115-2_cyto3_tcpcn_geometry.zip` contain the corresponding TCPCN JSON and PLY outputs for WO115-2.
 - `evaluation_summaries.zip` contains the CSV, TXT, and PDF evaluation summaries under `Result/`.
 - Each `*.npy.zip` archive contains one segmentation-evaluation array and extracts directly under `Result/`.
 - `SHA256SUMS.txt` records checksums for all release archives.
 
-Extract every archive into the `benchmark/` directory. Existing directory names and filenames should be preserved because the evaluation commands use them to associate datasets and methods.
+Extract every archive into the `benchmark/` directory. Existing directory names and filenames should be preserved because the evaluation commands use them to associate datasets and methods. Full pipeline visualizations are not distributed as Release assets.
 
 ## Reproducing TCPCN Outputs
 
@@ -64,7 +64,6 @@ python TCPCN.py \
   --img_dir benchmark/Dataset/Sansha-5 \
   --mask_dir benchmark/Result/Sansha-5/cellposesam \
   --output_dir benchmark/Result/Sansha-5/cellposesam_ours \
-  --vis_dir benchmark/Result/Sansha-5/cellposesam_ours/vis \
   --fix_convexity 1 \
   --split_4way 1 \
   --k_size 51
